@@ -115,6 +115,16 @@ usb_read_in (FpDevice *dev,
 
 /************************** INIT SSM *************************************/
 
+enum {
+  M_INIT_STATE_SEND_INI_QUERY = 0,
+  M_INIT_STATE_RECOVER_READ_IGNORED,
+  M_INIT_STATE_RECOVER_SEND_RESET,
+  M_INIT_STATE_RECOVER_READ_IGNORED_RESET,
+  M_INIT_STATE_RECOVER_SEND_INIT,
+  M_INIT_STATE_RECEIVE_STATUS,
+  M_INIT_STATE_COUNT,
+};
+
 static void
 m_init_read_cb_check_expected (FpiUsbTransfer *transfer,
                                FpDevice       *dev,
@@ -136,11 +146,9 @@ m_init_read_cb_check_expected (FpiUsbTransfer *transfer,
       fp_dbg ("Read %lu of requested %lu", transfer->length, transfer->actual_length);
       if (transfer->actual_length != CS9711_FP_CMD_LEN_1)
         {
-          fp_err ("Error; expected %lu bytes but got %lu, failing", (gsize)CS9711_FP_CMD_LEN_1, transfer->actual_length);
-          error = g_error_new (FP_DEVICE_ERROR, FP_DEVICE_ERROR_PROTO,
-                               "Init: expected %lu bytes but got %lu",
-                               (gsize)CS9711_FP_CMD_LEN_1, transfer->actual_length);
-          fpi_ssm_mark_failed (transfer->ssm, error);
+          fp_warn ("Error; expected %lu bytes but got %lu, attempting recovery via reset",
+                   (gsize)CS9711_FP_CMD_LEN_1, transfer->actual_length);
+          fpi_ssm_jump_to_state (transfer->ssm, M_INIT_STATE_RECOVER_SEND_RESET);
         }
       else if (memcmp (transfer->buffer, expected, CS9711_FP_CMD_LEN_1)) {
         if (!user_data_is_ignore_mismatch_if_non_null) {
@@ -155,16 +163,6 @@ m_init_read_cb_check_expected (FpiUsbTransfer *transfer,
         }
     }
 }
-
-enum {
-  M_INIT_STATE_SEND_INI_QUERY = 0,
-  M_INIT_STATE_RECOVER_READ_IGNORED,
-  M_INIT_STATE_RECOVER_SEND_RESET,
-  M_INIT_STATE_RECOVER_READ_IGNORED_RESET,
-  M_INIT_STATE_RECOVER_SEND_INIT,
-  M_INIT_STATE_RECEIVE_STATUS,
-  M_INIT_STATE_COUNT,
-};
 
 /* Exec init sequential state machine */
 static void
